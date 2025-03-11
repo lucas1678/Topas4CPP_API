@@ -5,7 +5,7 @@ This project provides a C++ implementation of the Topas4Locator class, which dis
 ## Features
 
 - Locates Topas4 devices on the same local network
-- Works on Windows, macOS, and Linux platforms
+- Currently only works on Windows (will add compatibility for Linux soon)
 - Uses UDP multicast
 - Filters duplicate device responses
 - Returns device information including serial numbers and REST API URLs
@@ -83,6 +83,6 @@ The locator works by:
 
 After discovering a device, you can communicate with it using its REST API URL. The typical workflow is:
 
-1. Locate devices using `Topas4Locator`
+1. Locate devices using `TopasLocator`
 2. Select a device by serial number or other criteria
 3. (TBD)
