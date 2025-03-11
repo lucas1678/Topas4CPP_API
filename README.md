@@ -76,7 +76,7 @@ The locator works by:
 1. Creating a UDP socket
 2. Sending the message "Topas4?" to both a multicast address (239.0.0.181:7415) and localhost
 3. Collecting and parsing JSON responses from devices
-4. Filtering out duplicate responses based on device GUIDs
+4. Filtering out duplicate responses based on device GUIDs (will be added soon)
 5. Returning a vector of device information (JSON)
 
 ## Next Steps
