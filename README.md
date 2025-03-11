@@ -6,7 +6,7 @@ This project provides a C++ implementation of the Topas4Locator class, which dis
 
 - Locates Topas4 devices on the same local network
 - Works on Windows, macOS, and Linux platforms
-- Uses UDP multicast and loopback discovery
+- Uses UDP multicast
 - Filters duplicate device responses
 - Returns device information including serial numbers and REST API URLs
 
@@ -20,19 +20,19 @@ This project provides a C++ implementation of the Topas4Locator class, which dis
 ## Project Structure
 
 ```
-topas4_project/
+Topas4CPP_API/
 ├── CMakeLists.txt        # Project build configuration
-├── main.cc               # Main application entry point
-├── Topas4Locator.hh      # Class declaration header
-└── Topas4Locator.cc      # Class implementation
+├── main.cc              # Main application entry point
+├── TopasLocator.hh      # Class declaration header
+└── TopasLocator.cc      # Class implementation
 ```
 
 ## Building the Project
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/topas4-locator.git
-cd topas4-locator
+git clone https://github.com/yourusername/Topas4CPP_API.git 
+cd Topas4CPP_API
 
 # Create a build directory
 mkdir build
@@ -47,11 +47,11 @@ cmake --build .
 
 ```cpp
 #include <iostream>
-#include "Topas4Locator.hh"
+#include "TopasLocator.hh"
 
 int main() {
     // Create a locator instance
-    Topas4Locator locator;
+    TopasLocator locator;
     
     // Find devices on the network
     auto devices = locator.locate();
@@ -77,7 +77,7 @@ The locator works by:
 2. Sending the message "Topas4?" to both a multicast address (239.0.0.181:7415) and localhost
 3. Collecting and parsing JSON responses from devices
 4. Filtering out duplicate responses based on device GUIDs
-5. Returning a vector of device information
+5. Returning a vector of device information (JSON)
 
 ## Next Steps
 
@@ -85,8 +85,4 @@ After discovering a device, you can communicate with it using its REST API URL. 
 
 1. Locate devices using `Topas4Locator`
 2. Select a device by serial number or other criteria
-3. Use the device's `PublicApiRestUrl_Version0` to communicate via HTTP requests
-
-## License
-
-[Your chosen license]
+3. (TBD)
