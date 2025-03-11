@@ -13,6 +13,16 @@
     #include <WinSock2.h>
     #include <WS2tcpip.h>
     #pragma comment(lib, "WS2_32.lib")
+#else
+    #include <sys/socket.h>
+    #include <netinet/in.h>
+    #include <arpa/inet.h>
+    #include <unistd.h>
+    #include <fcntl.h>
+    typedef int SOCKET;
+    #define SOCKET_ERROR -1
+    #define INVALID_SOCKET -1
+    #define closesocket close
 #endif
 
 

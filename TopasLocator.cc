@@ -1,6 +1,7 @@
 #include "TopasLocator.hh"
 
 TopasLocator::TopasLocator(){
+    #ifdef _WIN32
     WORD wVersionRequested;
     WSADATA wsaData;
     int err;
@@ -12,17 +13,24 @@ TopasLocator::TopasLocator(){
         // Tell user we could not find usable Winsock DLL
         printf("WSAStartup failed with error: %d\n", err);
     }
+    #endif
 }
 
 TopasLocator::~TopasLocator(){
+    #ifdef _WIN32
     WSACleanup();
+    #endif
 }
 
 std::vector<json> TopasLocator::locate(){
     //  Create a UDP socket
     SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
     if(sock == INVALID_SOCKET){
-        printf("Socket creation failed with error %ld. Returning empty vector\n", WSAGetLastError());
+        #ifdef _WIN32
+            printf("Socket creation failed with error %ld. Returning empty vector\n", WSAGetLastError());
+        #else
+            printf("Socket creation failed with error %d: %s. Returning empty vector\n", errno, strerror(errno));
+        #endif
         return {};
     }
 
@@ -35,7 +43,7 @@ std::vector<json> TopasLocator::locate(){
 
     //  Define localhost address
     struct sockaddr_in localhostAddr;
-    memset(&localhostAddr, 0, sizeof(localhostAddr)); //basically populates this address with a bunch of 0s first. To prevent random behaviour.
+    memset(&localhostAddr, 0, sizeof(localhostAddr));
     localhostAddr.sin_family = AF_INET;
     localhostAddr.sin_addr.s_addr = inet_addr("127.255.255.255"); // double check this with API documentation
     localhostAddr.sin_port = htons(7415);
@@ -47,19 +55,33 @@ std::vector<json> TopasLocator::locate(){
     int send_result = 0;
     send_result = sendto(sock, message.c_str(), message.length(), 0, (struct sockaddr*)&multicastAddr, sizeof(multicastAddr));
     if(send_result == SOCKET_ERROR){
-        printf("Sending to multicast address failed with error %ld\n", WSAGetLastError());
+        #ifdef _WIN32
+            printf("Sending to multicast address failed with error %ld\n", WSAGetLastError());
+        #else
+            printf("Sending to multicast address failed with error %d: %s\n", errno, strerror(errno));
+        #endif
     }
 
     //  Send message to localhost address
     send_result = sendto(sock, message.c_str(), message.length(), 0, (struct sockaddr*)&localhostAddr, sizeof(localhostAddr));
     if(send_result == SOCKET_ERROR){
-        printf("Sending to multicast address failed with error %ld\n", WSAGetLastError());
+        #ifdef _WIN32
+            printf("Sending to localhost address failed with error %ld\n", WSAGetLastError());
+        #else
+            printf("Sending to localhost address failed with error %d: %s\n", errno, strerror(errno));
+        #endif
     }
 
     //  Configure socket settings such that we spend at most 1 second listening for a response
-    DWORD timeout = 1000;  // DWORD is basically Windows specific unsigned int!
-    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));  // can add a check to see if this fails!
-
+    #ifdef _WIN32
+        DWORD timeout = 1000;  // DWORD is basically Windows specific unsigned int!
+        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));  // can add a check to see if this fails!
+    #else
+        struct timeval tv;
+        tv.tv_sec = 1;
+        tv.tv_usec = 0;
+        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    #endif
 
     //  Set up variables to receive a response
     std::vector<json> devices;
@@ -73,8 +95,13 @@ std::vector<json> TopasLocator::locate(){
     while(true){
         int bytesReceived = recvfrom(sock, buffer, buffer_size, 0, (struct sockaddr*)&senderAddr, &senderAddrSize);
         if(bytesReceived == SOCKET_ERROR){
-            if(WSAGetLastError() == WSAETIMEDOUT) {break;}
-            printf("Error receiving data: %ld\n", WSAGetLastError());
+            #ifdef _WIN32
+                if(WSAGetLastError() == WSAETIMEDOUT) {break;}
+                printf("Error receiving data: %ld\n", WSAGetLastError());
+            #else
+                if(errno == EAGAIN || errno == EWOULDBLOCK) {break;}
+                printf("Error receiving data. Errno %d: %s\n", errno, strerror(errno));
+            #endif
         }
 
         // Set message endpoint to the null terminator
@@ -92,6 +119,21 @@ std::vector<json> TopasLocator::locate(){
     }
 
     closesocket(sock);
-    return devices;
+
+    //  Remove duplicate devices
+    std::vector<json> uniqueDevices;
+    std::set<std::string> seenGUIDS;
+
+    for (const auto& device : devices){
+        if(device.contains("SenderGUID")){
+            std::string guid = device["SenderGUID"];
+            if(seenGUIDS.find(guid) == seenGUIDS.end()){
+                seenGUIDS.insert(guid);
+                uniqueDevices.push_back(device);
+            }
+        }
+    }
+
+    return uniqueDevices;
 }
 

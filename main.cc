@@ -2,18 +2,14 @@
 #include "TopasLocator.hh"
 
 
-void printDevices(const std::vector<json>& devices) {
+void printDevices(const std::vector<json>& devices){
     std::cout << "Found " << devices.size() << " Topas4 devices:" << std::endl;
     
-    for (size_t i = 0; i < devices.size(); ++i) {
+    for (size_t i = 0; i < devices.size(); ++i){
         std::cout << "\nDevice " << (i + 1) << ":" << std::endl;
         
         // Pretty-print the entire JSON object
         std::cout << std::setw(4) << devices[i] << std::endl;
-        
-        // Or access and print specific fields:
-        //std::cout << "  Serial Number: " << devices[i]["SerialNumber"] << std::endl;
-        //std::cout << "  REST API URL: " << devices[i]["PublicApiRestUrl_Version0"] << std::endl;
     }
 }
 
