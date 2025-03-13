@@ -1,8 +1,8 @@
 #include <iostream>
-#include "TopasLocator.hh"
+#include "TopasDevice.hh"
 
 
-void printDevices(const std::vector<json>& devices){
+/*void printDevices(const std::vector<json>& devices){
     std::cout << "Found " << devices.size() << " Topas4 devices:" << std::endl;
     
     for (size_t i = 0; i < devices.size(); ++i){
@@ -11,15 +11,18 @@ void printDevices(const std::vector<json>& devices){
         // Pretty-print the entire JSON object
         std::cout << std::setw(4) << devices[i] << std::endl;
     }
-}
+}*/
 
 
 int main(){
-    TopasLocator* testLocator = new TopasLocator();
+    const std::string serialNumber = "Orpheus-F-Demo-1023";
 
-    std::vector<json> devices = testLocator->locate();
-    printDevices(devices);
+    TopasDevice* testDevice = new TopasDevice(serialNumber);
+    TopasDevice::ShutterStatus status = testDevice->getShutterStatus();
+    float current_wavelength = testDevice->getCurrentWavelength();
 
-    delete testLocator;
+    printf("Current wavelength of device %4.1fnm\n", current_wavelength);
+
+    delete testDevice;
     return 0;
 }

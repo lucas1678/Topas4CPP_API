@@ -26,12 +26,14 @@ set(SOURCES
     main.cc
     TopasLocator.cc
     TopasCommunicator.cc
+    TopasDevice.cc
 )
 
 # Header files
 set(HEADERS
     TopasLocator.hh
     TopasCommunicator.hh
+    TopasDevice.hh
 )
 
 # Add executable target

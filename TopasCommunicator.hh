@@ -10,6 +10,13 @@ public:
     TopasCommunicator(const std::string& serialNum);
     ~TopasCommunicator();
 
+    json get(const std::string& url) const;
+    json put(const std::string& url, const json& data) const;
+    json post(const std::string& url, const json& data) const;
+
+    bool isInitialized() const;
+    std::string baseAddress() const;
+
 private:
     const std::string m_serialNum;
     TopasLocator m_locator;
