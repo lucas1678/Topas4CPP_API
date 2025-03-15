@@ -76,6 +76,11 @@ json TopasCommunicator::get(const std::string& url) const {
     }
     curl_easy_cleanup(curl);
 
+    // Return an empty JSON object if no response
+    if (response.empty()) {
+        return json::object();
+    }
+
     //  Parse the JSON response
     try{
         return json::parse(response);
@@ -126,6 +131,11 @@ json TopasCommunicator::put(const std::string& url, const json& data) const {
     //Clean up
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
+
+    // Return an empty JSON object if no response
+    if (response.empty()) {
+        return json::object();
+    }
 
     //  Parse the JSON response
     try{
@@ -179,6 +189,11 @@ json TopasCommunicator::post(const std::string& url, const json& data) const {
     //Clean up
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
+
+    // Return an empty JSON object if no response
+    if (response.empty()) {
+        return json::object();
+    }
 
     //  Parse the JSON response
     try{

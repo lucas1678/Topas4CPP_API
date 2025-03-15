@@ -1,4 +1,7 @@
 #include <iostream>
+#include <chrono>
+#include <thread>
+
 #include "TopasDevice.hh"
 
 
@@ -18,11 +21,20 @@ int main(){
     const std::string serialNumber = "Orpheus-F-Demo-1023";
 
     TopasDevice* testDevice = new TopasDevice(serialNumber);
-    TopasDevice::ShutterStatus status = testDevice->getShutterStatus();
+    TopasDevice::ShutterStatus currentShutterStatus = testDevice->getShutterStatus();
     float current_wavelength = testDevice->getCurrentWavelength();
 
     printf("Current wavelength of device %4.1fnm\n", current_wavelength);
+    std::cout << "Current status of shutter: " << TopasDevice::ShutterStatusToString(currentShutterStatus) << std::endl;
 
+    testDevice->setShutterStatus(TopasDevice::ShutterStatus::CLOSED);
+    // Wait for the physical device to update
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    currentShutterStatus = testDevice->getShutterStatus();
+    std::cout << "Current status of shutter: " << TopasDevice::ShutterStatusToString(currentShutterStatus) << std::endl;
+    
+    testDevice->printAvailableInteractions();
+    
     delete testDevice;
     return 0;
 }
