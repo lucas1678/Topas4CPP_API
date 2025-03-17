@@ -23,7 +23,7 @@ find_package(CURL REQUIRED)
 
 # Source files
 set(SOURCES
-    main.cc
+    example.cc
     TopasLocator.cc
     TopasCommunicator.cc
     TopasDevice.cc
