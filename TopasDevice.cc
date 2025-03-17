@@ -44,6 +44,23 @@ TopasDevice::ShutterStatus TopasDevice::BooleanToShutterStatus(bool status){
     return (status) ? ShutterStatus::OPEN : ShutterStatus::CLOSED;
 }
 
+bool TopasDevice::isWavelengthInRange(float wavelength, const json& interaction) const {
+    float lowerBound = (float) interaction["OutputRange"]["From"];
+    float upperBound = (float) interaction["OutputRange"]["To"];
+    if((wavelength >= lowerBound) && (wavelength <= upperBound)) {return true;}
+    else {return false;}
+}
+
+json TopasDevice::getInteractionFromName(const std::string& interactionName) const {
+    json interactions = m_http_communicator.get(AVAIABLE_INTERACTIONS_ADDRESS);
+    for(const auto& item : interactions){
+        if(item["Type"] == interactionName) {return item;}
+    }
+    std::cerr << "[WARNING] Could not find interaction with name " << interactionName << ". Returning EMPTY JSON string..." << std::endl;
+    return json();
+
+}
+
 float TopasDevice::getCurrentWavelength() const {
     json data = m_http_communicator.get(WAVELENGTH_STATUS_ADDRESS);
     return data["Wavelength"].get<float>();
@@ -71,34 +88,93 @@ void TopasDevice::printAvailableInteractions() const {
     //std::cout << data << std::endl;
 }
 
-json TopasDevice::getAvailableInteractions() const {
+//  Sets the wavelength using the first interaction which is in the proper wavelength range
+void TopasDevice::setWavelength(float wavelengthToSet) const {
     json interactions = m_http_communicator.get(AVAIABLE_INTERACTIONS_ADDRESS);
-    return interactions;
+    for(const auto& item : interactions){
+        if(isWavelengthInRange(wavelengthToSet, item)==true){
+            //  set wavelength using the selected interaction
+            std::cout << "Setting wavelength of " << wavelengthToSet << " using interaction: " << item["Type"] << std::endl;
+            json data = {
+                {"Interaction", item["Type"]},
+                {"Wavelength", wavelengthToSet}
+            };
+            json response = m_http_communicator.put(WAVELENGTH_CONTROL_ADDRESS, data);
+
+            //  wait one second and check if changes went through
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            if(this->getCurrentWavelength()!=wavelengthToSet){
+                std::cerr << "[WARNING] HTTP request sent, but value has failed to update after 1 second" << std::endl;
+                return;
+            }
+
+            std::cout << "Sucess!" << std::endl;
+            return;
+        }
+    }
+
+    std::cout << "[ERROR] No interaction avaiable to set wavelength of " << wavelengthToSet << "nm" << std::endl;
+
 }
 
-void TopasDevice::setWavelength(float wavelength) const {
+void TopasDevice::setWavelength(float wavelengthToSet, const std::string& interactionName) const {
+    //  get the appropriate JSON data based on interaction name
+    json interaction = getInteractionFromName(interactionName);
+    if(interaction.empty()){
+        std::cerr << "[ERROR] Failed to set wavelength due to unrecognized interaction name" << std::endl;
+        return;
+    }
+    
+    //  check if parameters are valid
+    if(isWavelengthInRange(wavelengthToSet, interaction)==false){
+        std::cerr << "[ERROR] Out of range error. Cannot set wavelength of " << wavelengthToSet << "nm" << "using interaction: ";
+        std::cerr << interaction["Type"] << std::endl;
+        return;
+    }
 
+    //  pack data to send in request into a JSON format
+    json data = {
+        {"Interaction", interaction["Type"]},
+        {"Wavelength", wavelengthToSet}
+    };
+
+    //  send HTTP request
+    std::cout << "Setting wavelength of " << wavelengthToSet << " using interaction: " << interaction["Type"] << std::endl;
+    json response = m_http_communicator.put(WAVELENGTH_CONTROL_ADDRESS, data);
+    //  wait one second and check if changes went through
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    if(this->getCurrentWavelength()!=wavelengthToSet){
+        std::cerr << "[WARNING] HTTP request sent, but value has failed to update after 1 second" << std::endl;
+        return;
+    }
+    
+    std::cout << "Success!" << std::endl;
+    return;
 }
 
-void TopasDevice::setWavelength(float wavelength, const std::string& interaction) const {
-
-}
-
-void TopasDevice::setShutterStatus(ShutterStatus status) const {
+void TopasDevice::setShutterStatus(ShutterStatus statusToSet) const {
     json response;
-    switch(status){
+    switch(statusToSet){
         case(ShutterStatus::OPEN):
             std::cout << "Requesting to open shutter... " << std::endl;
             response = m_http_communicator.put(SHUTTER_CONTROL_ADDRESS, true);
-            //  CHECK IF CHANGE WAS SUCCESSFUL WITH ANOTHER HTTP REQUEST
             break;
         case(ShutterStatus::CLOSED):
             std::cout << "Requesting to close shutter... " << std::endl;
             response = m_http_communicator.put(SHUTTER_CONTROL_ADDRESS, false);
-            //  CHECK IF CHANGE WAS SUCCESSFUL WITH ANOTHER HTTP REQUEST
             break;
         default:
             std::cerr << "setShutterStatus received unknown ShutterStatus type. Please try again" << std::endl;
-            break;
+            return;
     }
+
+    //  wait one second and check if changes went through
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    if(this->getShutterStatus()!=statusToSet){
+        std::cerr << "[WARNING] HTTP request sent, but value has failed to update after 1 second" << std::endl;
+        return;
+    }
+
+    std::cout << "Success!" << std::endl;
+    return;
 }

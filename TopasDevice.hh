@@ -1,6 +1,9 @@
 #ifndef TOPASDEVICE_HH
 #define TOPASDEVICE_HH
 
+#include <thread>
+#include <chrono>
+
 #include "TopasCommunicator.hh"
 
 class TopasDevice{
@@ -18,11 +21,10 @@ public:
 
     void setShutterStatus(ShutterStatus status) const;
     void setWavelength(float wavelength) const;
-    void setWavelength(float wavelength, const std::string& interaction) const;
+    void setWavelength(float wavelength, const std::string& interactionName) const;
 
     ShutterStatus getShutterStatus() const;
     float getCurrentWavelength() const;
-    json getAvailableInteractions() const;
     void printDeviceInfo() const;
     void printAvailableInteractions() const;
 private:
@@ -38,11 +40,9 @@ private:
     const std::string SHUTTER_STATUS_ADDRESS = "/ShutterInterlock/IsShutterOpen";
     const std::string AVAIABLE_INTERACTIONS_ADDRESS = "/Optical/WavelengthControl/ExpandedInteractions";
 
-    /*ShutterStatus m_shutterStatus;
-    float m_wavelength;*/
-
+    bool isWavelengthInRange(float wavelength, const json& item) const;
+    json getInteractionFromName(const std::string& interactionName) const;
     void waitForWavelengthSetting() const;
-    //void updateAllSettings();  // this method should update all the member variables such as m_shutterStatus by sending appropriate HTTP requests
 };
 
 
