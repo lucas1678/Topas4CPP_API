@@ -108,7 +108,7 @@ void TopasDevice::setWavelength(float wavelengthToSet) const {
                 return;
             }
 
-            std::cout << "Sucess!" << std::endl;
+            std::cout << "Success!" << std::endl;
             return;
         }
     }

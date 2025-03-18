@@ -31,7 +31,7 @@ TopasCommunicator::TopasCommunicator(const std::string& serialNum) : m_serialNum
     }
 
     //  If no device found, throw a warning
-    std::cerr << "Failed to find device with serial number " << m_serialNum << std::endl;
+    std::cerr << "[WARNING] Failed to find device with serial number " << m_serialNum << std::endl;
 }
 
 TopasCommunicator::~TopasCommunicator(){
@@ -49,7 +49,7 @@ std::string TopasCommunicator::baseAddress() const {
 json TopasCommunicator::get(const std::string& url) const {
     //  Check if device is properly initialized
     if (!m_initialized){
-        std::cerr << "Error: Device not initialized!" << std::endl;
+        std::cerr << "[ERROR] Device not initialized!" << std::endl;
         return json();
     }
 
