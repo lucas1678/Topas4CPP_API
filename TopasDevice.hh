@@ -4,6 +4,10 @@
 #include <thread>
 #include <chrono>
 
+#ifdef _WIN32
+    #define NOMINMAX  //  so that max() works properly with C++ standard library as opposed to being overwritten by windows.h implementation!
+#endif
+
 #include "TopasCommunicator.hh"
 
 class TopasDevice{
@@ -14,11 +18,13 @@ public:
     };
 
     static std::string ShutterStatusToString(ShutterStatus status);
+    static bool ShutterStatusToBoolean(ShutterStatus status);
     static ShutterStatus BooleanToShutterStatus(bool status);
 public:
     TopasDevice(const std::string& serialNum);
     ~TopasDevice();
 
+    bool isInitialized() const;
     void setShutterStatus(ShutterStatus status) const;
     void setWavelength(float wavelength) const;
     void setWavelength(float wavelength, const std::string& interactionName) const;

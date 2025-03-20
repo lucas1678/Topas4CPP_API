@@ -1,291 +1,218 @@
-/*******************************************************************\
-
-  Name:         tmfe_example_frontend.cxx
-  Created by:   K.Olchanski
-
-  Contents:     Example of converting examples/experiment/frontend.cxx to TMFE framework
-
-\********************************************************************/
-
-#undef NDEBUG // midas required assert() to be always enabled
+// LaserSystemFe.cc
+//
+//  MIDAS frontend for the Topas laser system at MIEL
+//
+// March 2025, Lucas Backes <lbackes@triumf.ca>
 
 #include <stdio.h>
-#include <math.h> // M_PI
+#include <signal.h> // SIGPIPE
+#include <assert.h> // assert()
+#include <stdlib.h> // malloc()
 
-#include "tmfe.h"
+#include "midas.h"
 #include "TopasDevice.hh"
 
-/********************************************************************\
+/* Callbacks for when ODB settings change */
+// If wanting to implement, take a look at Maia's KeySight Frontend as an example
 
-  Name:         frontend.c
-  Created by:   Stefan Ritt
-
-  Contents:     Experiment specific readout code (user part) of
-                Midas frontend. This example simulates a "trigger
-                event" and a "periodic event" which are filled with
-                random data.
- 
-                The trigger event is filled with two banks (ADC0 and TDC0),
-                both with values with a gaussian distribution between
-                0 and 4096. About 100 event are produced per second.
- 
-                The periodic event contains one bank (PRDC) with four
-                sine-wave values with a period of one minute. The
-                periodic event is produced once per second and can
-                be viewed in the history system.
-
-\********************************************************************/
-
-#undef NDEBUG // midas required assert() to be always enabled
-
-//#include "midas.h"
-//#include "experim.h"
-
-#if 0
-const char *frontend_name = "Sample Frontend";
-const char *frontend_file_name = __FILE__;
-BOOL frontend_call_loop = FALSE;
-INT display_period = 3000;
-INT max_event_size = 10000;
-INT max_event_size_frag = 5 * 1024 * 1024;
-INT event_buffer_size = 100 * 10000;
-BOOL equipment_common_overwrite = TRUE;
-
-EQUIPMENT equipment[] = {
-
-   {"Trigger",               /* equipment name */
-      {1, 0,                 /* event ID, trigger mask */
-         "SYSTEM",           /* event buffer */
-         EQ_POLLED,          /* equipment type */
-         0,                  /* event source */
-         "MIDAS",            /* format */
-         TRUE,               /* enabled */
-         RO_RUNNING |        /* read only when running */
-         RO_ODB,             /* and update ODB */
-         100,                /* poll for 100ms */
-         0,                  /* stop run after this event limit */
-         0,                  /* number of sub events */
-         0,                  /* don't log history */
-         "", "", "",},
-      read_trigger_event,    /* readout routine */
-   },
-
-   {"Periodic",              /* equipment name */
-      {2, 0,                 /* event ID, trigger mask */
-         "SYSTEM",           /* event buffer */
-         EQ_PERIODIC,        /* equipment type */
-         0,                  /* event source */
-         "MIDAS",            /* format */
-         TRUE,               /* enabled */
-         RO_RUNNING | RO_TRANSITIONS |   /* read when running and on transitions */
-         RO_ODB,             /* and update ODB */
-         1000,               /* read every sec */
-         0,                  /* stop run after this event limit */
-         0,                  /* number of sub events */
-         TRUE,               /* log history */
-         "", "", "",},
-      read_periodic_event,   /* readout routine */
-   },
-
-   {""}
-};
-#endif
-
-class EqTrigger :
-   public TMFeEquipment
+/* This class name is fe... following the midas-2020 release convention, but would now be known as an Equipment */
+class feTopasDevice : public TMFePeriodicHandlerInterface
 {
+private:
+    const char[] fSerialNumber{"Orpheus-F-Demo-1023"};  //  maybe change to const std::string? But char[] is better
 public:
-   EqTrigger(const char* eqname, const char* eqfilename) // ctor
-      : TMFeEquipment(eqname, eqfilename)
-   {
-      /* configure your equipment here */
-      
-      fEqConfReadConfigFromOdb = false;
-      fEqConfEventID = 1;
-      fEqConfBuffer = "SYSTEM";
-      fEqConfPeriodMilliSec = 0; // in milliseconds
-      fEqConfLogHistory = 0;
-      fEqConfReadOnlyWhenRunning = true;  // change to false depending on whether you want to read wavelength/shutter status in live time
-      //fEqConfWriteEventsToOdb = true;
-      fEqConfEnablePoll = true; // enable polled equipment
-      //fEqConfPollSleepSec = 0; // to create a "100% CPU busy" polling loop, set poll sleep time to zero 
-      fEqConfPollSleepSec = 0.010; // limit event rate to 100 Hz. In a real experiment remove this line
-   }
+    TMFE* fMfe;
+    TMFeEquipment* fEq;
 
-   ~EqTrigger() // dtor
-   {
-   }
+    int fEventSize;
+    char* fEventBuf;
 
-   void HandleUsage()
-   {
-      printf("EqTrigger::Usage!\n");
-   }
+    TopasDevice* laserEquipment{nullptr};  //  Using nullptr instead of NULL (C++11 practice. More type-safe)
 
-   TMFeResult HandleInit(const std::vector<std::string>& args)
-   {
-      /* put any hardware initialization here */
-
-
-      /* start poll thread here */
-
-      //EqStartPollThread();
-      
-      /* return TMFeErrorMessage("my error message") if frontend should not be started */
-      return TMFeOk();
-   }
-
-   TMFeResult HandleRpc(const char* cmd, const char* args, std::string& response)
-   {
-      /* handler for JRPC into the frontend, see tmfe_example_everything.cxx */
-      return TMFeOk();
-   }
-
-   TMFeResult HandleBeginRun(int run_number)
-   {
-      /* put here clear scalers etc. */
-      return TMFeOk();
-   }
-
-   TMFeResult HandleEndRun(int run_number)
-   {
-      return TMFeOk();
-   }
-
-   bool HandlePoll()
-   {
-      /* Polling routine for events. Returns TRUE if event is available */
-      return true;
-   }
-
-   void HandlePollRead()
-   {
-      char buf[1024];
-      ComposeEvent(buf, sizeof(buf));
-      BkInit(buf, sizeof(buf));
-
-      /* create structured ADC0 bank */
-      uint32_t* pdata = (uint32_t*)BkOpen(buf, "ADC0", TID_UINT32);
-      
-      /* following code to "simulates" some ADC data */
-      for (int a = 0; a < 4; a++)
-         *pdata++ = rand()%1024 + rand()%1024 + rand()%1024 + rand()%1024;
-
-      BkClose(buf, pdata);
-
-      /* create variable length TDC bank */
-      pdata = (uint32_t*)BkOpen(buf, "TDC0", TID_UINT32);
-      
-      /* following code to "simulates" some TDC data */
-      for (int a = 0; a < 4; a++)
-         *pdata++ = rand()%1024 + rand()%1024 + rand()%1024 + rand()%1024;
-
-      BkClose(buf, pdata);
-      
-      EqSendEvent(buf);
-   }
-};
-
-class EqPeriodic :
-   public TMFeEquipment
-{
-protected:
-   TopasDevice fTopasDevice;
-   std::string fTopasSerialNum;
 public:
-   EqPeriodic(const char* eqname, const char* eqfilename) // ctor
-      : TMFeEquipment(eqname, eqfilename), 
-      fTopasSerialNum{"Orpheus-F-Demo-1023"},
-      fTopasDevice(fTopasSerialNum)
-   {
-      /* configure your equipment here */
-      fEqConfReadConfigFromOdb = false;
-      fEqConfEventID = 2;
-      fEqConfBuffer = "SYSTEM";
-      fEqConfPeriodMilliSec = 1000; // in milliseconds
-      fEqConfLogHistory = 1;
-      fEqConfReadOnlyWhenRunning = true;
-      fEqConfWriteEventsToOdb = true;
-   }
+    feTopasDevice(TMFE* mfe, TMFeEquipment* eq) // ctor
+    {
+        fMfe = mfe;
+        fEq = eq;
+        fEventSize{0};
+        fEventBuf{nullptr};
+    }
 
-   void HandlePeriodic()
-   {
-        char buffer[1024];
-        ComposeEvent(buffer, sizeof(buffer));
-        BkInit(buffer, sizeof(buffer));
+    ~feTopasDevice() // dtor
+    {
+        if (laserEquipment) {delete laserEquipment;}
 
-        const char[] bank_name = "ABCD"; 
-        // Create BANK with name ABCD
-        float* bank_data_ptr = (float*) BkOpen(buffer, bank_name, TID_FLOAT);  // float --> 4 bytes
-        
+        if (fEventBuf){
+            free(fEventBuf);
+            fEventBuf = NULL;
+        }
+    }
 
+    void Init()
+    {
+        fEq->SetStatus("Initializing...", "lightgreen");
 
+        std::cout << "\n\n\
+               **********************************************************\n\
+               *                                                        *\n\
+               *              MIDAS MIEL Laser System INTERFACE         *\n\
+               *                                                        *\n\
+               *                Blah blah blah blah blah                *\n\
+               *                   ~~~~~~~~~~~~~~~~~~~                  *\n\
+               *                                                        *\n\
+               **********************************************************\n\n";
 
+        // Initialize event buffers for MIDAS banks
+        fEventSize = (sizeof(double) + sizeof(bool)); // 1 boolean + 1 double per event (status and wavelength)
+        if (fEventBuf) {free(fEventBuf);}
+        fEventBuf = (char *)malloc(fEventSize);
 
-      /*char buf[1024];
+        // Initialize ODB Settings and Variables
+        // Create with default values if they don't exist, or get the current value of Settings if they do
+        int delay_ms = 0;
+        int num_points = 100;
+        bool shutterStatus{false};
+        double wavelength{-1.0};
+        std::vector<std::string> avaiableInteractions;
 
-      ComposeEvent(buf, sizeof(buf));
-      BkInit(buf, sizeof(buf));
+        fEq->fOdbEqVariables->RB("Shutter Status", &shutterStatus, true);
+        fEq->fOdbEqVariables->RD("Wavelength", &wavelength, true);
+        //  How to read collection of strings (from MIDAS) to put into avaiable interactions? Use a for loop?
+        //fEq->fOdbEqSettings->RI("Readings_Per_Buffer", &num_points, true);
+        //fEq->fOdbEqSettings->RI("Delay_ms", &delay_ms, true);
 
-      // create SCLR bank
-      uint32_t* pdata = (uint32_t*)BkOpen(buf, "PRDC", TID_UINT32);
-      
-      // following code "simulates" some values in sine wave form 
-      for (int a = 0; a < 16; a++)
-         *pdata++ = 100*sin(M_PI*time(NULL)/60+a/2.0)+100;
-      
-      BkClose(buf, pdata);
+        // Create the TopasDevice object and connect to it (done in constructor, as of right now)
+        laserEquipment = new TopasDevice(fSerialNumber);
+        //laserEquipment->initialize_device();
+        if (!laserEquipment->isInitialized()){
+            //  maybe try to connect one more time here? But we have no init method currently!
+            fMfe->Msg(MERROR, "Init", "Couldn't find the device. Make sure it is connected and try again.");
+            fEq->SetStatus("Connection Failure", "white");
+            return;
+        }
 
-      EqSendEvent(buf); */
-   }
+        // update device settings to match ODB settings
+        laserEquipment->setShutterStatus(shutterStatus);
+        laserEquipment->setWavelength(wavelength);  // right now this picks a random interaction! CHANGE later
+
+        // (IF USING CALLBACKS LATER) Register callbacks for each setting change here
+        // Delay_ms doesn't need a callback
+
+        fEq->SetStatus("Ready!", "#00FF00");
+    }
+
+    /* Saves a current readout event.
+     * This program creates three banks in each event: KBCS, KBCR, and KBCT.
+     *
+     * The bank KACS (Keysight b2985A Current Summary) will contain four double-precision values:
+     *    1. The mean of 100 current readings, in Amps (assume KB6517_POINTS_PER_BUF = 100)
+     *    2. The standard deviation of the 100 current readings
+     *    3. The voltage source's commanded output, in Volts (i.e. commanded output = voltage level && voltage on?)
+     *    4. The integration period used for the measurements, in Number of Power Line Cycles
+     *
+     * The bank KACR (Keysight b2985A Current Raw) will contain all 100 current readings, in Amps. These are stored as 32-bit floats
+     * The bank KATR (Keysight b2985A Time Raw) will contain the corresponding timestamps for all 100 current readings, in seconds since the first reading
+     *
+     * @param dvalue1 the mean current reading
+     * @param dvalue2 the standard deviation
+     * @param dvalue3 the commanded voltage output
+     * @param dvalue4 the integration period used
+     *
+     * @param raw_data an array of bytes, IEEE-754 single-precision (32 bit), alternating Current, Time, Current, Time as output by the Keysight 6517B
+     * @param size the number of data points (Current, Time) in the buffer. i.e. one data point uses 8 bytes
+     */
+    void SendEvent(bool shutterStatusToSend, double wavelengthToSend){
+        fEq->ComposeEvent(fEventBuf, fEventSize);
+        fEq->BkInit(fEventBuf, fEventSize);
+
+        //  Create TWAV bank to store wavelength
+        double* dptr = (double*) fEq->BkOpen(fEventBuf, "TWAV", TID_DOUBLE);
+        *dptr++ = wavelengthToSend;
+        fEq->BkClose(fEventBuf, dptr);
+
+        //  Create TSHU bank to store shutter status
+        bool* bptr = (bool*) fEq->BkOpen(fEventBuf, "TSHU", TID_BOOL);
+        *bptr++ = shutterStatusToSend;
+        fEq->BkClose(fEventBuf, fEventSize);
+    }
+
+    /* we could make this a Polled equipment, just have to do some fiddling to keep NPLC consistent for each buffer */
+    void HandlePeriodic()
+    {
+        if (!laserEquipment->isInitialized()){
+            fEq->SetStatus("Connection Failure", "lightred");
+            return;
+        }
+
+        bool currentShutterStatus = TopasDevice::ShutterStatusToBoolean(laserEquipment->getShutterStatus());
+        double currentWavelength = (double) laserEquipment->getCurrentWavelength(); 
+
+        // Update MIDAS with shutter status, wavelength, interactions avaiable
+        SendEvent(currentShutterStatus, currentWavelength); // save data to MIDAS bank to mid.lz4 file
+        fEq->fOdbEqVariables->WD("Shutter Status", currentShutterStatus);   // also save as an ODB variable
+        fEq->fOdbEqVariables->WD("Wavelength", currentWavelength);
+        fEq->WriteStatistics(); // update the statistics like number of events sent, etc
+
+        // update status on MIDAS Status page
+        /*char msg[64] = {0};
+        sprintf(msg, "%.2f V, %.3e A", volt, mean);
+        fEq->SetStatus(msg, "lightgreen");*/
+    }
 };
 
-class FeExample: public TMFrontend
+int main(int argc, char *argv[])
 {
-public:
-   FeExample() // ctor
-   {
-      /* register with the framework */
-      FeSetName("Sample Frontend");
-      FeAddEquipment(new EqTrigger("Trigger", __FILE__));
-      FeAddEquipment(new EqPeriodic("Periodic", __FILE__));
-   }
+    setbuf(stdout, NULL);
+    setbuf(stderr, NULL);
 
-   TMFeResult HandleFrontendInit(const std::vector<std::string>& args)
-   {
-      /* called before equipment HandleInit(), do all hardware initialization here */
+    signal(SIGPIPE, SIG_IGN);
 
-      printf("frontend init!\n");
+    std::string name = "Topas";
 
-      return TMFeOk();
-   };
-   
-   TMFeResult HandleFrontendReady(const std::vector<std::string>& args)
-   {
-      /* called after equipment HandleInit(), anything that needs to be done
-       * before starting the main loop goes here */
+    TMFE *mfe = TMFE::Instance();
 
-      printf("frontend ready!\n");
+    TMFeError err = mfe->Connect(name.c_str(), __FILE__);
+    if (err.error)
+    {
+        printf("Cannot connect, bye.\n");
+        return 1;
+    }
 
-      /* start periodic and rpc threads here */
+    mfe->SetWatchdogSec(0); // disables timeout
+    // mfe->SetWatchdogSec(15);
 
-      //fMfe->StartPeriodicThread();
-      //fMfe->StartRpcThread();
+    TMFeCommon *common = new TMFeCommon();
+    common->EventID = 85;
+    common->LogHistory = 1;
+    common->Buffer = "SYSTEM";
 
-      return TMFeOk();
-   };
-   
-   void HandleFrontendExit()
-   {
-      /* hardware shutdown goes here */
+    TMFeEquipment *eq = new TMFeEquipment(mfe, "LaserEquipment", common);
+    eq->Init();
+    eq->SetStatus("Starting...", "white");
+    eq->ZeroStatistics();
+    eq->WriteStatistics();
 
-      printf("frontend exit!\n");
-   };
-};
+    mfe->RegisterEquipment(eq);
 
-int main(int argc, char* argv[])
-{
-   FeExample fe_example;
-   return fe_example.FeMain(argc, argv);
+    feTopasDevice *myfe = new feTopasDevice(mfe, eq);
+    myfe->Init();
+    mfe->RegisterPeriodicHandler(eq, myfe);
+
+    while (!mfe->fShutdownRequested)
+    {
+        mfe->PollMidas(10);
+    }
+
+    // do cleanup tasks. It seems I get a warning when I try to delete the dynamically allocated memory here (in particular, deleting myfe), but we really do want to make sure picometer gets deleted because the destructor does safety cleanup
+    if (myfe->laserEquipment)
+    {
+        delete myfe->laserEquipment;
+    }
+
+    eq->SetStatus("Stopped", "white");
+    mfe->Disconnect();
+
+    return 0;
 }
 
 /* emacs

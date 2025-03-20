@@ -24,7 +24,7 @@ int promptUser(){
 }
 
 int main(){
-    const std::string serialNumber = "Orpheus-F-DDemo-1023";
+    const std::string serialNumber = "Orpheus-F-Demo-1023";
     TopasDevice* device1 = new TopasDevice(serialNumber);
     
     while(true){
