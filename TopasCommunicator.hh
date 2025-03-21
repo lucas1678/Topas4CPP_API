@@ -8,7 +8,11 @@
 class TopasCommunicator{
 public:
     TopasCommunicator(const std::string& serialNum);
+    TopasCommunicator();
     ~TopasCommunicator();
+
+    bool initializeWithSerialNumber(const std::string& serialNum);
+    bool initializeWithBaseAddress(const std::string& baseAddress);
 
     json get(const std::string& url) const;
     json put(const std::string& url, const json& data) const;
@@ -16,9 +20,10 @@ public:
 
     bool isInitialized() const;
     std::string baseAddress() const;
+    void setBaseAddress(const std::string& baseAddressToSet);
 
 private:
-    const std::string m_serialNum;
+    std::string m_serialNum;
     TopasLocator m_locator;
     bool m_initialized;
     std::string m_baseAddress;

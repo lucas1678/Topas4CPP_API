@@ -38,6 +38,7 @@ std::vector<json> TopasLocator::locate(){
     struct sockaddr_in multicastAddr;
     memset(&multicastAddr, 0, sizeof(multicastAddr)); //basically populates this address with a bunch of 0s first. To prevent random behaviour.
     multicastAddr.sin_family = AF_INET;
+    //multicastAddr.sin_addr.s_addr = inet_addr("239.0.0.181");
     multicastAddr.sin_addr.s_addr = inet_addr("239.0.0.181");
     multicastAddr.sin_port = htons(7415);
 

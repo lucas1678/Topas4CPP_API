@@ -3,16 +3,12 @@
 //  Maybe a better idea would be to leave any logic out of the constructor and make a init() method instead
 //  This way a device object can be created anywhere, and it leaves the choice of when to initialize it to the user.
 //  Can implement/change later...
-TopasDevice::TopasDevice(const std::string& serialNum) : 
-    m_serialNum{serialNum}, 
+TopasDevice::TopasDevice() : 
+    m_serialNum{""}, 
     m_initialized{false}, 
-    m_http_communicator(serialNum)
+    m_http_communicator()
     //m_shutterStatus{ShutterStatus::CLOSED} 
 {
-    m_baseAddress = m_http_communicator.baseAddress();
-    m_initialized = m_http_communicator.isInitialized();
-
-
     //  I am choosing to not have member variables to represent device status
     //  Instead, the status of various things (shutter, wavelength etc) is only avaiable through
     //  Getter methods which send HTTP requests everytime. This way information is always up-to-date
@@ -30,6 +26,25 @@ TopasDevice::TopasDevice(const std::string& serialNum) :
 
 TopasDevice::~TopasDevice(){
 
+}
+
+void TopasDevice::initializeWithSerialNumber(const std::string& serialNum){
+    m_serialNum = serialNum;
+    m_initialized = m_http_communicator.initializeWithSerialNumber(serialNum);
+    if(!m_initialized){
+        std::cerr << "[ERROR] Failed to initialize http_communicator to serial number: " << serialNum << std::endl;
+        return;
+    }
+    std::cout << "Successfully initialized device with serial number: " << serialNum << std::endl;
+}
+
+void TopasDevice::initializeWithBaseAddress(const std::string& baseAddress){
+    m_initialized = m_http_communicator.initializeWithBaseAddress(baseAddress);
+    if(!m_initialized){
+        std::cerr << "[ERROR] Failed to initialize http_communicator to base address: " << baseAddress << std::endl;
+        return;
+    }
+    std::cout << "Successfully initialized device with base address: " << baseAddress << std::endl;
 }
 
 bool TopasDevice::isInitialized() const {
@@ -196,10 +211,10 @@ void TopasDevice::waitForWavelengthSetting() const {
                 }
             }
             //  wait for user input (hitting Enter key)...
-            std::cout << "Hit Enter to continue after actions have been performed. " << std::endl;
+            std::cout << "\nHit Enter to continue after actions have been performed. " << std::endl;
             std::cout << std::endl;
             std::cin.clear();
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n'); // Skip bad input
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');  //  skip bad input
             std::cin.get();
 
             //  tell the device that required actions have been performed.  
@@ -216,6 +231,7 @@ void TopasDevice::setShutterStatus(ShutterStatus statusToSet) const {
         case(ShutterStatus::OPEN):
             std::cout << "Requesting to open shutter... " << std::endl;
             response = m_http_communicator.put(SHUTTER_CONTROL_ADDRESS, true);
+            std::cout << "Response from request to open shutter is: " << response << std::endl;
             break;
         case(ShutterStatus::CLOSED):
             std::cout << "Requesting to close shutter... " << std::endl;

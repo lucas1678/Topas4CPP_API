@@ -21,8 +21,11 @@ public:
     static bool ShutterStatusToBoolean(ShutterStatus status);
     static ShutterStatus BooleanToShutterStatus(bool status);
 public:
-    TopasDevice(const std::string& serialNum);
+    TopasDevice();
     ~TopasDevice();
+
+    void initializeWithSerialNumber(const std::string& serialNum);
+    void initializeWithBaseAddress(const std::string& httpAddress);
 
     bool isInitialized() const;
     void setShutterStatus(ShutterStatus status) const;
@@ -34,8 +37,7 @@ public:
     void printDeviceInfo() const;
     void printAvailableInteractions() const;
 private:
-    const std::string m_serialNum;
-    std::string m_baseAddress;
+    std::string m_serialNum;
     bool m_initialized;
     TopasCommunicator m_http_communicator;
 

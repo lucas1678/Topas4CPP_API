@@ -1,7 +1,7 @@
 #include "TopasDevice.hh"
 
 
-/*void printDevices(const std::vector<json>& devices){
+void printDevices(const std::vector<json>& devices){
     std::cout << "Found " << devices.size() << " Topas4 devices:" << std::endl;
     
     for (size_t i = 0; i < devices.size(); ++i){
@@ -10,7 +10,7 @@
         // Pretty-print the entire JSON object
         std::cout << std::setw(4) << devices[i] << std::endl;
     }
-}*/
+}
 
 
 int promptUser(){
@@ -24,9 +24,14 @@ int promptUser(){
 }
 
 int main(){
+    TopasLocator* topasLocator = new TopasLocator();
+    std::vector<json> devices = topasLocator->locate();
+    printDevices(devices);
+
     const std::string serialNumber = "Orpheus-F-Demo-1023";
-    TopasDevice* device1 = new TopasDevice(serialNumber);
-    
+    TopasDevice* device1 = new TopasDevice();
+    device1->initializeWithSerialNumber(serialNumber);
+
     while(true){
         int userChoice = promptUser();
 
