@@ -173,8 +173,8 @@ void TopasDevice::setWavelength(float wavelengthToSet, const std::string& intera
     json response = m_http_communicator.put(WAVELENGTH_CONTROL_ADDRESS, data);
     this->waitForWavelengthSetting();
 
-    //  wait one second and check if changes went through
-    //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    //  wait one second and check if changes went through (maybe remove this)
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     if(this->getCurrentWavelength()!=wavelengthToSet){
         std::cerr << "[WARNING] HTTP request sent, but value has failed to update after 1 second" << std::endl;
         return;

@@ -19,7 +19,7 @@
 class feTopasDevice : public TMFePeriodicHandlerInterface
 {
 private:
-    const char[] fSerialNumber{"Orpheus-F-Demo-1023"};  //  maybe change to const std::string? But char[] is better
+    const char[] fSerialNumber{"P23894"};
 public:
     TMFE* fMfe;
     TMFeEquipment* fEq;
@@ -82,18 +82,23 @@ public:
         //fEq->fOdbEqSettings->RI("Delay_ms", &delay_ms, true);
 
         // Create the TopasDevice object and connect to it (done in constructor, as of right now)
-        laserEquipment = new TopasDevice(fSerialNumber);
-        //laserEquipment->initialize_device();
+        laserEquipment = new TopasDevice();
+        laserEquipment->initializeWithSerialNumber(fSerialNumber);
+
         if (!laserEquipment->isInitialized()){
-            //  maybe try to connect one more time here? But we have no init method currently!
-            fMfe->Msg(MERROR, "Init", "Couldn't find the device. Make sure it is connected and try again.");
-            fEq->SetStatus("Connection Failure", "white");
-            return;
+            //  try connecting again!
+            laserEquipment->initializeWithSerialNumber(fSerialNumber);
+            //  only if connection fails twice, throw error
+            if (!laserEquipment->isInitialized()){
+                fMfe->Msg(MERROR, "Init", "Couldn't find the device. Make sure it is connected and try again.");
+                fEq->SetStatus("Connection Failure", "white");
+                return;
+            }
         }
 
         // update device settings to match ODB settings
         laserEquipment->setShutterStatus(shutterStatus);
-        laserEquipment->setWavelength(wavelength);  // right now this picks a random interaction! CHANGE later
+        laserEquipment->setWavelength(wavelength);  // right now this picks a random interaction! CHANGE later if needed
 
         // (IF USING CALLBACKS LATER) Register callbacks for each setting change here
         // Delay_ms doesn't need a callback
@@ -167,7 +172,7 @@ int main(int argc, char *argv[])
 
     signal(SIGPIPE, SIG_IGN);
 
-    std::string name = "Topas";
+    std::string name = "LaserSystemFe";
 
     TMFE *mfe = TMFE::Instance();
 
@@ -182,7 +187,7 @@ int main(int argc, char *argv[])
     // mfe->SetWatchdogSec(15);
 
     TMFeCommon *common = new TMFeCommon();
-    common->EventID = 85;
+    common->EventID = 3;
     common->LogHistory = 1;
     common->Buffer = "SYSTEM";
 
