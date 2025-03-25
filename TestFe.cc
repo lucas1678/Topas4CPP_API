@@ -10,16 +10,19 @@
 #include <stdlib.h> // malloc()
 
 #include "midas.h"
+#include "tmfe_rev0.h"
 #include "TopasDevice.hh"
 
 /* Callbacks for when ODB settings change */
-// If wanting to implement, take a look at Maia's KeySight Frontend as an example
+void wavelength_callback(INT hDB, INT hkey, INT index, void *feptr);
+void shutter_callback(INT hDB, INT hkey, INT index, void *feptr);
 
 /* This class name is fe... following the midas-2020 release convention, but would now be known as an Equipment */
 class feTopasDevice : public TMFePeriodicHandlerInterface
 {
 private:
-    const char[] fSerialNumber{"P23894"};
+    //const char* fSerialNumber{"P23894"};
+    const char* fSerialNumber{"Orpheus-F-Demo-9388"};
 public:
     TMFE* fMfe;
     TMFeEquipment* fEq;
@@ -34,8 +37,8 @@ public:
     {
         fMfe = mfe;
         fEq = eq;
-        fEventSize{0};
-        fEventBuf{nullptr};
+        fEventSize = 0;
+        fEventBuf = nullptr;
     }
 
     ~feTopasDevice() // dtor
@@ -75,11 +78,8 @@ public:
         double wavelength{-1.0};
         std::vector<std::string> avaiableInteractions;
 
-        fEq->fOdbEqVariables->RB("Shutter Status", &shutterStatus, true);
+        fEq->fOdbEqVariables->RB("OpenShutter", &shutterStatus, true);
         fEq->fOdbEqVariables->RD("Wavelength", &wavelength, true);
-        //  How to read collection of strings (from MIDAS) to put into avaiable interactions? Use a for loop?
-        //fEq->fOdbEqSettings->RI("Readings_Per_Buffer", &num_points, true);
-        //fEq->fOdbEqSettings->RI("Delay_ms", &delay_ms, true);
 
         // Create the TopasDevice object and connect to it (done in constructor, as of right now)
         laserEquipment = new TopasDevice();
@@ -97,51 +97,39 @@ public:
         }
 
         // update device settings to match ODB settings
-        laserEquipment->setShutterStatus(shutterStatus);
+        laserEquipment->setShutterStatus(TopasDevice::BooleanToShutterStatus(shutterStatus));
         laserEquipment->setWavelength(wavelength);  // right now this picks a random interaction! CHANGE later if needed
 
-        // (IF USING CALLBACKS LATER) Register callbacks for each setting change here
-        // Delay_ms doesn't need a callback
+        //  register callbacks for each setting change
+        char tmpbuf[80];  //  80 bytes long temporary buffer (longer? shorter?)
+        HNDLE hkey;
+        sprintf(tmpbuf, "/Equipment/%s/Settings/Wavelength", fEq->fName.c_str());
+        db_find_key(fMfe->fDB, 0, tmpbuf, &hkey);
+        db_watch(fMfe->fDB, hkey, wavelength_callback, (void *)this);
+
+        sprintf(tmpbuf, "/Equipment/%s/Settings/OpenShutter", fEq->fName.c_str());
+        db_find_key(fMfe->fDB, 0, tmpbuf, &hkey);
+        db_watch(fMfe->fDB, hkey, shutter_callback, (void *)this);
 
         fEq->SetStatus("Ready!", "#00FF00");
     }
 
-    /* Saves a current readout event.
-     * This program creates three banks in each event: KBCS, KBCR, and KBCT.
-     *
-     * The bank KACS (Keysight b2985A Current Summary) will contain four double-precision values:
-     *    1. The mean of 100 current readings, in Amps (assume KB6517_POINTS_PER_BUF = 100)
-     *    2. The standard deviation of the 100 current readings
-     *    3. The voltage source's commanded output, in Volts (i.e. commanded output = voltage level && voltage on?)
-     *    4. The integration period used for the measurements, in Number of Power Line Cycles
-     *
-     * The bank KACR (Keysight b2985A Current Raw) will contain all 100 current readings, in Amps. These are stored as 32-bit floats
-     * The bank KATR (Keysight b2985A Time Raw) will contain the corresponding timestamps for all 100 current readings, in seconds since the first reading
-     *
-     * @param dvalue1 the mean current reading
-     * @param dvalue2 the standard deviation
-     * @param dvalue3 the commanded voltage output
-     * @param dvalue4 the integration period used
-     *
-     * @param raw_data an array of bytes, IEEE-754 single-precision (32 bit), alternating Current, Time, Current, Time as output by the Keysight 6517B
-     * @param size the number of data points (Current, Time) in the buffer. i.e. one data point uses 8 bytes
-     */
     void SendEvent(bool shutterStatusToSend, double wavelengthToSend){
         fEq->ComposeEvent(fEventBuf, fEventSize);
         fEq->BkInit(fEventBuf, fEventSize);
 
         //  Create TWAV bank to store wavelength
-        double* dptr = (double*) fEq->BkOpen(fEventBuf, "TWAV", TID_DOUBLE);
-        *dptr++ = wavelengthToSend;
-        fEq->BkClose(fEventBuf, dptr);
+        double* double_ptr = (double*) fEq->BkOpen(fEventBuf, "TWAV", TID_DOUBLE);
+        *double_ptr++ = wavelengthToSend;
+        fEq->BkClose(fEventBuf, double_ptr);
 
         //  Create TSHU bank to store shutter status
-        bool* bptr = (bool*) fEq->BkOpen(fEventBuf, "TSHU", TID_BOOL);
-        *bptr++ = shutterStatusToSend;
-        fEq->BkClose(fEventBuf, fEventSize);
+        bool* bool_ptr = (bool*) fEq->BkOpen(fEventBuf, "TSHU", TID_BOOL);
+        *bool_ptr++ = shutterStatusToSend;
+        fEq->BkClose(fEventBuf, bool_ptr);
     }
 
-    /* we could make this a Polled equipment, just have to do some fiddling to keep NPLC consistent for each buffer */
+    /* we could make this a Polled equipment(?) */
     void HandlePeriodic()
     {
         if (!laserEquipment->isInitialized()){
@@ -154,16 +142,73 @@ public:
 
         // Update MIDAS with shutter status, wavelength, interactions avaiable
         SendEvent(currentShutterStatus, currentWavelength); // save data to MIDAS bank to mid.lz4 file
-        fEq->fOdbEqVariables->WD("Shutter Status", currentShutterStatus);   // also save as an ODB variable
+        fEq->fOdbEqVariables->WB("OpenShutter", currentShutterStatus);   // also save as an ODB variable
         fEq->fOdbEqVariables->WD("Wavelength", currentWavelength);
         fEq->WriteStatistics(); // update the statistics like number of events sent, etc
 
         // update status on MIDAS Status page
-        /*char msg[64] = {0};
-        sprintf(msg, "%.2f V, %.3e A", volt, mean);
-        fEq->SetStatus(msg, "lightgreen");*/
+        char msg[64] = {0};
+        sprintf(msg, "Wavelength: %.0f nm, Shutter Status: %i", currentWavelength, currentShutterStatus);
+        fEq->SetStatus(msg, "lightgreen");
     }
 };
+
+void wavelength_callback(INT hDB, INT hkey, INT index, void *feptr)
+{
+    // get access to the frontend/equipment object
+    feTopasDevice* fe = (feTopasDevice* )feptr;
+
+    // get the updated value of the setting
+    double wavelength;
+    int size = sizeof(wavelength);
+    int status = db_get_data(hDB, hkey, &wavelength, &size, TID_DOUBLE);
+    if (status != DB_SUCCESS)
+    {
+        fe->fMfe->Msg(MERROR, "wavelength_callback", "Couldn't retrieve wavelength setting from ODB");
+        return;
+    }
+
+    // send the new value to the laser system
+    fe->laserEquipment->setWavelength(wavelength);
+
+    //  check that wavelength actually changed below? (API should already do that! Can change so it return true/false)
+    //  (NOT IMPLEMENTED)
+
+    // wait for settling if applicable (LUCAS - Use this is wavelength takes a bit to "settle", though I don't think this is the case)
+    /*int delay_ms = 0;
+    fe->fEq->fOdbEqSettings->RI("Delay_ms", &delay_ms);
+    usleep(delay_ms * 1000);*/
+}
+
+void shutter_callback(INT hDB, INT hkey, INT index, void *feptr)
+{
+    // get access to the frontend/equipment object
+    feTopasDevice* fe = (feTopasDevice* )feptr;
+
+    // get the updated value of the setting
+    bool shutterStatusToSet;
+    int size = sizeof(TopasDevice::BooleanToShutterStatus(shutterStatusToSet));  //  when sending, BOOL (1 byte) gets converted to ShutterStatus (4 bytes) 
+    int status = db_get_data(hDB, hkey, &shutterStatusToSet, &size, TID_BOOL);  //  so buffer needs to be 4 bytes long, not sizeof(bool)
+    if (status != DB_SUCCESS)
+    {
+        fe->fMfe->Msg(MERROR, "shutter_callback", "Couldn't retrieve shutter status (setting) from ODB");
+        return;
+    }
+
+    // send the new value to the laser system
+    fe->laserEquipment->setShutterStatus(TopasDevice::BooleanToShutterStatus(shutterStatusToSet));
+    //  check that status actually changed below? (API should already do that! Though I can change it so it return true/false)
+    //  (NOT IMPLEMENTED)
+
+    /*bool success = fe->laserEquipment->setShutterStatus(TopasDevice::BooleanToShutterStatus(shutterStatusToSet));
+    if (!success)
+    {
+        bool actual_status = TopasDevice::ShutterStatusToBoolean(fe->laserEquipment->getShutterStatus());
+        fe->fMfe->Msg(MERROR, "shutter_callback", "Couldn't set wavelength on the laser system to %i, it is actually at %i", shutterStatusToSet, actual_status);
+        return;
+    }*/
+}
+
 
 int main(int argc, char *argv[])
 {
